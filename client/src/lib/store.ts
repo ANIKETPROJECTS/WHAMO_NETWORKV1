@@ -47,11 +47,26 @@ interface EdgeData {
 export type WhamoNode = Node<NodeData>;
 export type WhamoEdge = Edge<EdgeData>;
 
+interface ComputationalParameters {
+  dtcomp: number;
+  dtout: number;
+  tmax: number;
+}
+
+interface OutputRequest {
+  id: string; // Internal ID for the request
+  elementId: string; // ID of the node or edge
+  elementType: 'node' | 'edge';
+  variables: string[]; // e.g., ['Q', 'HEAD', 'ELEV']
+}
+
 interface NetworkState {
   nodes: WhamoNode[];
   edges: WhamoEdge[];
   selectedElementId: string | null;
   selectedElementType: 'node' | 'edge' | null;
+  computationalParams: ComputationalParameters;
+  outputRequests: OutputRequest[];
 
   // Actions
   onNodesChange: OnNodesChange;
@@ -64,6 +79,9 @@ interface NetworkState {
   selectElement: (id: string | null, type: 'node' | 'edge' | null) => void;
   loadNetwork: (nodes: WhamoNode[], edges: WhamoEdge[]) => void;
   clearNetwork: () => void;
+  updateComputationalParams: (params: Partial<ComputationalParameters>) => void;
+  addOutputRequest: (request: Omit<OutputRequest, 'id'>) => void;
+  removeOutputRequest: (id: string) => void;
 }
 
 let idCounter = 1;
@@ -74,6 +92,12 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
   edges: [],
   selectedElementId: null,
   selectedElementType: null,
+  computationalParams: {
+    dtcomp: 0.01,
+    dtout: 0.1,
+    tmax: 500.0,
+  },
+  outputRequests: [],
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -158,7 +182,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
   updateNodeData: (id, data) => {
     set({
       nodes: get().nodes.map((node) =>
-        node.id === id ? { ...node, data: { ...node.data, ...data } } : node
+        node.id === id ? { ...node, data: { ...node.data, ...data } } as WhamoNode : node
       ),
     });
   },
@@ -243,7 +267,20 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
   },
 
   clearNetwork: () => {
-    set({ nodes: [], edges: [], selectedElementId: null, selectedElementType: null });
+    set({ nodes: [], edges: [], selectedElementId: null, selectedElementType: null, outputRequests: [] });
     idCounter = 1;
+  },
+
+  updateComputationalParams: (params) => {
+    set({ computationalParams: { ...get().computationalParams, ...params } });
+  },
+
+  addOutputRequest: (request) => {
+    const id = `req-${Date.now()}`;
+    set({ outputRequests: [...get().outputRequests, { ...request, id }] });
+  },
+
+  removeOutputRequest: (id) => {
+    set({ outputRequests: get().outputRequests.filter(r => r.id !== id) });
   },
 }));

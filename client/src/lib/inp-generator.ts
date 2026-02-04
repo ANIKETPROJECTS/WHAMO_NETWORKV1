@@ -1,7 +1,8 @@
-import { WhamoNode, WhamoEdge } from './store';
+import { WhamoNode, WhamoEdge, useNetworkStore } from './store';
 import { saveAs } from 'file-saver';
 
 export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[]) {
+  const state = useNetworkStore.getState();
   const lines: string[] = [];
 
   // Helper to add line
@@ -12,105 +13,6 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[]) {
     }
   };
 
-  // 1. SYSTEM Block (Topology)
-  add('c Project Name');
-  add('C  SYSTEM CONNECTIVITY');
-  add('');
-  add('SYSTEM');
-  add('');
-
-  // Reservoirs
-  nodes.filter(n => n.type === 'reservoir').forEach(n => {
-    addComment(n.data.comment);
-    add(`ELEM ${n.data.label} AT ${n.data.nodeNumber || n.id}`);
-  });
-
-  // Edges topology
-  edges.forEach(e => {
-    const fromNode = nodes.find(n => n.id === e.source);
-    const toNode = nodes.find(n => n.id === e.target);
-    const fromId = fromNode?.data.nodeNumber || fromNode?.id || e.source;
-    const toId = toNode?.data.nodeNumber || toNode?.id || e.target;
-    
-    // Check if source node is a junction
-    if (fromNode?.type === 'junction') {
-      add('');
-      add(`JUNCTION AT ${fromId}`);
-      add('');
-    }
-
-    addComment(e.data.comment);
-    if (e.data.type === 'dummy') {
-      add(`ELEM ${e.data.label || e.id} LINK ${fromId} ${toId}`);
-    } else {
-      add(`ELEM ${e.data.label || e.id} LINK ${fromId} ${toId}`);
-    }
-
-    // Special case for elements that are "AT" a node but defined in system
-    // Like Surge Tanks and Flow Boundaries
-  });
-
-  // Surge Tanks in System
-  nodes.filter(n => n.type === 'surgeTank').forEach(n => {
-    addComment(n.data.comment);
-    add(`ELEM ${n.data.label} AT ${n.data.nodeNumber}`);
-  });
-
-  // Flow Boundaries in System
-  nodes.filter(n => n.type === 'flowBoundary').forEach(n => {
-    addComment(n.data.comment);
-    add(`ELEM ${n.data.label} AT ${n.data.nodeNumber}`);
-  });
-
-  add('');
-
-  // Node Elevations
-  nodes.forEach(n => {
-    if (n.data.elevation !== undefined) {
-      add(`NODE ${n.data.nodeNumber || n.id} ELEV ${n.data.elevation}`);
-    }
-  });
-
-  add('');
-  add('FINISH');
-  add('');
-
-  // 2. ELEMENT PROPERTIES
-  add('C ELEMENT PROPERTIES');
-  add('');
-
-  // Reservoirs
-  nodes.filter(n => n.type === 'reservoir').forEach(n => {
-    addComment(n.data.comment);
-    add('RESERVOIR');
-    add(` ID ${n.data.label}`);
-    add(` ELEV ${n.data.elevation}`);
-    add(' FINISH');
-    add('');
-  });
-
-  // Conduits
-  edges.filter(e => e.data.type === 'conduit').forEach(e => {
-    const d = e.data;
-    addComment(d.comment);
-    let line = `CONDUIT ID ${d.label || e.id} LENG ${d.length} DIAM ${d.diameter} CELE ${d.celerity} FRIC ${d.friction}`;
-    if (d.numSegments !== undefined) line += ` NUMSEG ${d.numSegments}`;
-    line += ' FINISH';
-    add(line);
-    
-    if (d.cplus !== undefined || d.cminus !== undefined) {
-      let addedLoss = 'ADDEDLOSS';
-      if (d.cplus !== undefined) addedLoss += ` CPLUS ${d.cplus}`;
-      if (d.cminus !== undefined) addedLoss += ` CMINUS ${d.cminus}`;
-      addedLoss += ' FINISH'; // Note: User example shows FINISH at end of Conduit usually, but addedloss can be separate
-      // Re-reading user example: "ADDEDLOSS CPLUS 0.1 CMINUS 0.1 NUMSEG 5 FINISH" 
-      // Wait, the sample .inp shows: "CONDUIT ID C1 LENG 13405.51 DIAM 34.45 CELE 2852.51 FRIC 0.008\nADDEDLOSS CPLUS 0.1 CMINUS 0.1 NUMSEG 5 FINISH"
-      // Let me adjust.
-    }
-  });
-
-  // Refined Conduits based on exact sample
-  lines.length = 0; // Clear and restart with better understanding
   const addL = (str: string) => lines.push(str);
   
   addL('c Project Name');
@@ -245,15 +147,30 @@ export function generateInpFile(nodes: WhamoNode[], edges: WhamoEdge[]) {
   addL('');
   addL('C OUTPUT REQUEST');
   addL('');
-  addL('HISTORY');
-  addL(' NODE 2 Q HEAD');
-  addL(' ElEM ST Q ELEV');
-  addL(' FINISH');
+  if (state.outputRequests.length > 0) {
+    addL('HISTORY');
+    state.outputRequests.forEach(req => {
+      const element = req.elementType === 'node' 
+        ? nodes.find(n => n.id === req.elementId)
+        : edges.find(e => e.id === req.elementId);
+      
+      const label = element?.data?.label || element?.id || req.elementId;
+      const typeStr = req.elementType === 'node' ? 'NODE' : 'ELEM';
+      addL(` ${typeStr} ${label} ${req.variables.join(' ')}`);
+    });
+    addL(' FINISH');
+  } else {
+    addL('HISTORY');
+    addL(' NODE 2 Q HEAD');
+    addL(' ElEM ST Q ELEV');
+    addL(' FINISH');
+  }
   addL('');
   addL('');
   addL('C COMPUTATIONAL PARAMETERS');
   addL('CONTROL');
-  addL(' DTCOMP 0.01 DTOUT .1 TMAX 500.0');
+  const cp = state.computationalParams;
+  addL(` DTCOMP ${cp.dtcomp} DTOUT ${cp.dtout} TMAX ${cp.tmax}`);
   addL('FINISH');
   addL('');
   addL('C EXECUTION CONTROL');

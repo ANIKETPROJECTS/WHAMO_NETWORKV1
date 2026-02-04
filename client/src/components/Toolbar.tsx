@@ -9,15 +9,72 @@ import {
   Download, 
   Save, 
   Upload, 
-  MousePointer2 
+  MousePointer2,
+  Settings2,
+  ListVideo
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNetworkStore } from '@/lib/store';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function Toolbar({ onExport, onSave, onLoad }: { onExport: () => void, onSave: () => void, onLoad: () => void }) {
-  const { addNode, clearNetwork, selectedElementId } = useNetworkStore();
+  const { 
+    addNode, 
+    clearNetwork, 
+    nodes, 
+    edges, 
+    computationalParams, 
+    updateComputationalParams,
+    outputRequests,
+    addOutputRequest,
+    removeOutputRequest
+  } = useNetworkStore();
+
+  const [localParams, setLocalParams] = useState(computationalParams);
+  const [selectedElementId, setSelectedElementId] = useState<string>("");
+  const [selectedVars, setSelectedVars] = useState<string[]>([]);
+
+  const handleParamSave = () => {
+    updateComputationalParams(localParams);
+  };
+
+  const handleAddRequest = () => {
+    if (!selectedElementId || selectedVars.length === 0) return;
+    
+    const node = nodes.find(n => n.id === selectedElementId);
+    const edge = edges.find(e => e.id === selectedElementId);
+    const type = node ? 'node' : 'edge';
+
+    addOutputRequest({
+      elementId: selectedElementId,
+      elementType: type,
+      variables: selectedVars
+    });
+    setSelectedElementId("");
+    setSelectedVars([]);
+  };
+
+  const availableVars = ["Q", "HEAD", "ELEV", "VEL", "PRESS"];
 
   const tools = [
     { label: 'Reservoir', icon: Cylinder, action: () => addNode('reservoir', { x: 100, y: 100 }), color: 'text-blue-600' },
@@ -39,6 +96,131 @@ export function Toolbar({ onExport, onSave, onLoad }: { onExport: () => void, on
             </TooltipTrigger>
             <TooltipContent>Select / Move</TooltipContent>
           </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="h-8 mx-2" />
+
+        <div className="flex items-center gap-1">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 h-9">
+                <ListVideo className="w-4 h-4" />
+                Output Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Configure Output Requests</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Select Element</Label>
+                  <Select value={selectedElementId} onValueChange={setSelectedElementId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select element..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_" disabled>Nodes</SelectItem>
+                      {nodes.map(n => (
+                        <SelectItem key={n.id} value={n.id}>{n.data.label || `Node ${n.id}`}</SelectItem>
+                      ))}
+                      <SelectItem value="__" disabled>Conduits</SelectItem>
+                      {edges.map(e => (
+                        <SelectItem key={e.id} value={e.id}>{e.data?.label || `Edge ${e.id}`}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Variables</Label>
+                  <div className="flex flex-wrap gap-4">
+                    {availableVars.map(v => (
+                      <div key={v} className="flex items-center gap-2">
+                        <Checkbox 
+                          id={`var-${v}`} 
+                          checked={selectedVars.includes(v)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedVars([...selectedVars, v]);
+                            else setSelectedVars(selectedVars.filter(sv => sv !== v));
+                          }}
+                        />
+                        <Label htmlFor={`var-${v}`}>{v}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Button onClick={handleAddRequest}>Add Request</Button>
+                
+                <Separator />
+                
+                <div className="max-h-[200px] overflow-auto">
+                  <Label className="mb-2 block">Current Requests</Label>
+                  {outputRequests.map(req => {
+                    const el = nodes.find(n => n.id === req.elementId) || edges.find(e => e.id === req.elementId);
+                    return (
+                      <div key={req.id} className="flex items-center justify-between text-sm py-1 border-b">
+                        <span>{el?.data?.label || req.elementId}: {req.variables.join(', ')}</span>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeOutputRequest(req.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 h-9">
+                <Settings2 className="w-4 h-4" />
+                COMPUTATIONAL PARAMETERS
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Computational Parameters</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dtcomp" className="text-right">DTCOMP</Label>
+                  <Input 
+                    id="dtcomp" 
+                    type="number" 
+                    step="0.001"
+                    className="col-span-3" 
+                    value={localParams.dtcomp}
+                    onChange={e => setLocalParams({...localParams, dtcomp: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dtout" className="text-right">DTOUT</Label>
+                  <Input 
+                    id="dtout" 
+                    type="number" 
+                    step="0.01"
+                    className="col-span-3" 
+                    value={localParams.dtout}
+                    onChange={e => setLocalParams({...localParams, dtout: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="tmax" className="text-right">TMAX</Label>
+                  <Input 
+                    id="tmax" 
+                    type="number" 
+                    className="col-span-3" 
+                    value={localParams.tmax}
+                    onChange={e => setLocalParams({...localParams, tmax: parseFloat(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleParamSave}>Save changes</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Separator orientation="vertical" className="h-8 mx-2" />
