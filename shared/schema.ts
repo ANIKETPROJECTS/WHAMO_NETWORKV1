@@ -1,18 +1,107 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// === TABLE DEFINITIONS ===
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  content: jsonb("content").notNull(), // Stores the entire NetworkState
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// === BASE SCHEMAS ===
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
+
+// === APPLICATION TYPES (Network Elements) ===
+
+// Node Types
+export const nodeTypeSchema = z.enum(["reservoir", "node", "junction", "surgeTank", "flowBoundary"]);
+export type NodeType = z.infer<typeof nodeTypeSchema>;
+
+// Element Properties Schemas
+export const reservoirPropsSchema = z.object({
+  id: z.string(),
+  elevation: z.number(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const nodePropsSchema = z.object({
+  nodeNumber: z.number().int(),
+  elevation: z.number(),
+});
+
+export const junctionPropsSchema = z.object({
+  nodeNumber: z.number().int(),
+  elevation: z.number(),
+});
+
+export const surgeTankPropsSchema = z.object({
+  id: z.string(),
+  nodeNumber: z.number().int(),
+  topElevation: z.number(),
+  bottomElevation: z.number(),
+  diameter: z.number(),
+  celerity: z.number(),
+  friction: z.number(),
+});
+
+export const flowBoundaryPropsSchema = z.object({
+  id: z.string(),
+  nodeNumber: z.number().int(),
+  scheduleNumber: z.number().int(),
+});
+
+// Link/Conduit Types
+export const linkTypeSchema = z.enum(["conduit", "dummy"]);
+export type LinkType = z.infer<typeof linkTypeSchema>;
+
+export const conduitPropsSchema = z.object({
+  id: z.string(),
+  fromNode: z.number().int(), // Node Number
+  toNode: z.number().int(),   // Node Number
+  length: z.number(),
+  diameter: z.number(),
+  celerity: z.number(),
+  friction: z.number(),
+  numSegments: z.number().int().default(1),
+  cplus: z.number().optional(),
+  cminus: z.number().optional(),
+});
+
+export const dummyPipePropsSchema = z.object({
+  id: z.string(),
+  fromNode: z.number().int(),
+  toNode: z.number().int(),
+  diameter: z.number(),
+  cplus: z.number().optional(),
+  cminus: z.number().optional(),
+});
+
+// Network State Structure (matches the spec's JSON structure)
+export const networkStateSchema = z.object({
+  nodes: z.array(z.object({
+    id: z.string(), // React Flow ID
+    type: nodeTypeSchema,
+    position: z.object({ x: z.number(), y: z.number() }),
+    data: z.any(), // Holds the specific properties based on type
+  })),
+  edges: z.array(z.object({
+    id: z.string(), // React Flow ID
+    type: linkTypeSchema,
+    source: z.string(),
+    target: z.string(),
+    data: z.any(), // Holds the specific properties based on type
+  })),
+});
+
+export type NetworkState = z.infer<typeof networkStateSchema>;
+
+// === API CONTRACT TYPES ===
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+
+export type CreateProjectRequest = InsertProject;
+export type UpdateProjectRequest = Partial<InsertProject>;
+
+export type ProjectResponse = Project;
+export type ProjectListResponse = Project[];
