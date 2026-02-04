@@ -88,6 +88,8 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
 
   onConnect: (connection: Connection) => {
     const id = getId();
+    const existingEdgeCount = get().edges.length;
+    const connectionLabel = `C${existingEdgeCount + 1}`;
     set({
       edges: addEdge(
         {
@@ -100,7 +102,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
             color: '#64748b',
           },
           data: { 
-            label: `C-${id}`, 
+            label: connectionLabel, 
             type: 'conduit', 
             length: 1000, 
             diameter: 0.5, 
