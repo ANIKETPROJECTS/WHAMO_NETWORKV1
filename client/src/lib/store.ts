@@ -93,8 +93,12 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
         {
           ...connection,
           id,
-          type: 'connection', // Use custom connection type for rotating arrow
-          style: { stroke: '#3b82f6', strokeWidth: 2 },
+          type: 'connection',
+          style: { stroke: '#64748b', strokeWidth: 2 },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: '#64748b',
+          },
           data: { 
             label: `C-${id}`, 
             type: 'conduit', 

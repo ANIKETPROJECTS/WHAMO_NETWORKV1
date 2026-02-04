@@ -27,21 +27,9 @@ export const ConnectionEdge = memo(({
 
   return (
     <>
-      <defs>
-        <marker
-          id="arrowhead"
-          markerWidth="10"
-          markerHeight="7"
-          refX="9"
-          refY="3.5"
-          orient="auto"
-        >
-          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
-        </marker>
-      </defs>
       <BaseEdge 
         path={edgePath} 
-        markerEnd="url(#arrowhead)" 
+        markerEnd={markerEnd} 
         style={{
           ...style,
           strokeWidth: 2,
